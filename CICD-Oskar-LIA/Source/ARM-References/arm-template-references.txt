@@ -1,0 +1,11 @@
+arm template introduction
+https://www.red-gate.com/simple-talk/cloud/infrastructure-as-a-service/azure-resource-manager-arm-templates/
+
+arm template functions reference
+funktioner som används av arm rest api som kan förenkla deployment av resurser
+https://docs.microsoft.com/en-gb/azure/azure-resource-manager/resource-group-template-functions
+
+resource connection arm template example
+Hittade inte tillräcklig dokumentering på connectors, förklarar hur connectors fungerar och hur man kan hitta
+rätt parametrar för tillgängliga connectors vid deployment av arm templates
+https://www.bruttin.com/2017/06/13/deploy-logic-app-with-arm.html

@@ -1,0 +1,1050 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "connections_outlook_name": {
+      "defaultValue": "outlook",
+      "type": "String"
+    },
+    "connections_azuretable_name": {
+      "defaultValue": "azuretable",
+      "type": "String"
+    },
+    "connections_servicebus_name": {
+      "defaultValue": "servicebus",
+      "type": "String"
+    },
+    "workflows_Employee_Create_App_name": {
+      "defaultValue": "Employee-Create-App",
+      "type": "String"
+    },
+    "workflows_Employee_Delete_App_name": {
+      "defaultValue": "Employee-Delete-App",
+      "type": "String"
+    },
+    "workflows_Eployee_MailHandler_name": {
+      "defaultValue": "Eployee-MailHandler",
+      "type": "String"
+    },
+    "namespaces_azemployeebusprod_name": {
+      "defaultValue": "azemployeebusprod",
+      "type": "String"
+    },
+    "workflows_AdminValidator_name": {
+      "defaultValue": "AdminValidator",
+      "type" :  "String"
+    },
+    "storageAccounts_employeestorageunqprod_name": {
+      "defaultValue": "employeestorageunqprod",
+      "type": "String"
+    },
+    "resourcegroup_location": {
+      "defaultValue": "[resourceGroup().location]",
+      "type" :  "String"
+    }
+
+  },
+  "variables": {},
+  "resources": [
+
+    {
+      "type": "Microsoft.ServiceBus/namespaces",
+      "apiVersion": "2018-01-01-preview",
+      "name": "[parameters('namespaces_azemployeebusprod_name')]",
+      "location": "[parameters('resourcegroup_location')]",
+      "sku": {
+        "name": "Standard",
+        "tier": "Standard"
+      },
+      "properties": {
+        "zoneRedundant": false
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2019-04-01",
+      "name": "[parameters('storageAccounts_employeestorageunqprod_name')]",
+      "location": "[parameters('resourcegroup_location')]",
+      "sku": {
+        "name": "Standard_RAGRS",
+        "tier": "Standard"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "networkAcls": {
+          "bypass": "AzureServices",
+          "virtualNetworkRules": [],
+          "ipRules": [],
+          "defaultAction": "Allow"
+        },
+        "supportsHttpsTrafficOnly": true,
+        "encryption": {
+          "services": {
+            "file": {
+              "enabled": true
+            },
+            "blob": {
+              "enabled": true
+            }
+          },
+          "keySource": "Microsoft.Storage"
+        },
+        "accessTier": "Cool"
+      }
+    },
+    {
+      "type": "Microsoft.Web/connections",
+      "apiVersion": "2016-06-01",
+      "name": "[parameters('connections_azuretable_name')]",
+      "location": "[parameters('resourcegroup_location')]",
+      "dependsOn": [ "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_employeestorageunqprod_name'))]" ],
+      "properties": {
+        "displayName": "test table",
+        "customParameterValues": {},
+        "api": {
+          "id": "[concat('subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azuretables')]"
+        },
+        "parameterValues": {
+          "storageaccount": "[parameters('storageAccounts_employeestorageunqprod_name')]",
+          "sharedkey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_employeestorageunqprod_name')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value]"
+        }
+      }
+    },
+
+    {
+      "type": "Microsoft.Web/connections",
+      "apiVersion": "2016-06-01",
+      "name": "[parameters('connections_outlook_name')]",
+      "location": "[parameters('resourcegroup_location')]",
+      "properties": {
+        "displayName": "[concat('test ', parameters('connections_outlook_name'))]",
+        "customParameterValues": {},
+        "api": {
+          "id": "[concat('subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/outlook')]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Web/connections",
+      "apiVersion": "2016-06-01",
+      "name": "[parameters('connections_servicebus_name')]",
+      "location": "[parameters('resourcegroup_location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces/AuthorizationRules', parameters('namespaces_azemployeebusprod_name'), 'RootManageSharedAccessKey')]",
+        "[resourceId('Microsoft.ServiceBus/namespaces', parameters('namespaces_azemployeebusprod_name'))]"
+      ],
+      "properties": {
+        "displayName": "Router",
+        "customParameterValues": {},
+        "api": {
+          "id": "[concat('/subscriptions/',  subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location , '/managedApis/servicebus')]"
+        },
+        "parameterValues": {
+          "connectionString": "[listKeys(resourceId('Microsoft.ServiceBus/namespaces/authorizationRules', parameters('namespaces_azemployeebusprod_name'), 'RootManageSharedAccessKey'), '2015-08-01').primaryConnectionString]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2017-07-01",
+      "name": "[parameters('workflows_AdminValidator_name')]",
+      "location": "[parameters('resourcegroup_location')]",
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "$connections": {
+              "defaultValue": {},
+              "type": "Object"
+            }
+          },
+          "triggers": {
+            "When_a_message_is_received_in_a_topic_subscription_(peek-lock)": {
+              "recurrence": {
+                "frequency": "Day",
+                "interval": 3
+              },
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['servicetopic']['connectionId']"
+                  }
+                },
+                "method": "get",
+                "path": "/@{encodeURIComponent(encodeURIComponent('employeeroutetopic'))}/subscriptions/@{encodeURIComponent('CreateSub')}/messages/head/peek",
+                "queries": {
+                  "sessionId": "None",
+                  "subscriptionType": "Main"
+                }
+              }
+            }
+          },
+          "actions": {
+            "Complete_the_message_in_a_topic_subscription": {
+              "runAfter": {
+                "Condition": [
+                  "Succeeded"
+                ]
+              },
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['servicetopic']['connectionId']"
+                  }
+                },
+                "method": "delete",
+                "path": "/@{encodeURIComponent(encodeURIComponent('employeeroutetopic'))}/subscriptions/@{encodeURIComponent('CreateSub')}/messages/complete",
+                "queries": {
+                  "lockToken": "@triggerBody()?['LockToken']",
+                  "sessionId": "",
+                  "subscriptionType": "Main"
+                }
+              }
+            },
+            "Condition": {
+              "actions": {
+                "Condition_2": {
+                  "actions": {
+                    "Compose": {
+                      "runAfter": {},
+                      "type": "Compose",
+                      "inputs": "A request was sent to Accept and admin position\nEmployee Name : @{body('Parse_JSON')?['Name']}\nId : @{body('Parse_JSON')?['RowKey']}\nDepartment : @{body('Parse_JSON')?['PartitionKey']}"
+                    },
+                    "Condition_3": {
+                      "actions": {
+                        "Insert_Entity_2": {
+                          "runAfter": {},
+                          "type": "ApiConnection",
+                          "inputs": {
+                            "body": "@triggerBody()?['ContentData']",
+                            "host": {
+                              "connection": {
+                                "name": "@parameters('$connections')['azuretable']['connectionId']"
+                              }
+                            },
+                            "method": "post",
+                            "path": "/Tables/@{encodeURIComponent('Employee')}/entities"
+                          }
+                        }
+                      },
+                      "runAfter": {
+                        "Send_approval_email": [
+                          "Succeeded"
+                        ]
+                      },
+                      "expression": {
+                        "and": [
+                          {
+                            "equals": [
+                              "@body('Send_approval_email')?['SelectedOption']",
+                              "Approve"
+                            ]
+                          }
+                        ]
+                      },
+                      "type": "If"
+                    },
+                    "Send_approval_email": {
+                      "runAfter": {
+                        "Compose": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "ApiConnectionWebhook",
+                      "inputs": {
+                        "body": {
+                          "Message": {
+                            "Body": "@{outputs('Compose')}",
+                            "Importance": "High",
+                            "Options": "Approve, Reject",
+                            "Subject": "Approval Request",
+                            "To": "oskar.aronsson@learnet.se"
+                          },
+                          "NotificationUrl": "@{listCallbackUrl()}"
+                        },
+                        "host": {
+                          "connection": {
+                            "name": "@parameters('$connections')['outlook']['connectionId']"
+                          }
+                        },
+                        "path": "/approvalmail/$subscriptions"
+                      }
+                    }
+                  },
+                  "runAfter": {},
+                  "else": {
+                    "actions": {
+                      "Send_message": {
+                        "runAfter": {},
+                        "type": "ApiConnection",
+                        "inputs": {
+                          "body": {
+                            "ContentData": "@{triggerBody()?['ContentData']}",
+                            "Label": "create",
+                            "ScheduledEnqueueTimeUtc": "@{addHours(startOfDay(addDays(utcNow(),1)), 10)}"
+                          },
+                          "host": {
+                            "connection": {
+                              "name": "@parameters('$connections')['servicetopic']['connectionId']"
+                            }
+                          },
+                          "method": "post",
+                          "path": "/@{encodeURIComponent(encodeURIComponent('employeeroutetopic'))}/messages",
+                          "queries": {
+                            "systemProperties": "None"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "expression": {
+                    "and": [
+                      {
+                        "greaterOrEquals": [
+                          "@ticks(addHours(utcNow(),2))",
+                          "@add(ticks(startOfDay(addHours(utcNow(), 2))),288000000000)"
+                        ]
+                      },
+                      {
+                        "less": [
+                          "@ticks(addHours(utcNow(),2)) ",
+                          "@add(ticks(startOfDay(addHours(utcNow(), 2))),648000000000)"
+                        ]
+                      }
+                    ]
+                  },
+                  "type": "If"
+                }
+              },
+              "runAfter": {
+                "Parse_JSON": [
+                  "Succeeded"
+                ]
+              },
+              "else": {
+                "actions": {
+                  "Insert_Entity": {
+                    "runAfter": {},
+                    "type": "ApiConnection",
+                    "inputs": {
+                      "body": "@base64ToString(triggerBody()?['ContentData'])",
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['azuretable']['connectionId']"
+                        }
+                      },
+                      "method": "post",
+                      "path": "/Tables/@{encodeURIComponent('Employee')}/entities"
+                    }
+                  }
+                }
+              },
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@body('Parse_JSON')?['Admin']",
+                      true
+                    ]
+                  }
+                ]
+              },
+              "type": "If"
+            },
+            "Parse_JSON": {
+              "runAfter": {},
+              "type": "ParseJson",
+              "inputs": {
+                "content": "@base64ToString(triggerBody()?['ContentData'])",
+                "schema": {
+                  "properties": {
+                    "Admin": {
+                      "type": "boolean"
+                    },
+                    "EmailAdress": {
+                      "type": "string"
+                    },
+                    "Name": {
+                      "type": "string"
+                    },
+                    "PartitionKey": {
+                      "type": "string"
+                    },
+                    "RowKey": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "outputs": {}
+        },
+        "parameters": {
+          "$connections": {
+            "value": {
+              "outlook": {
+                "connectionId": "[resourceId('Microsoft.Web/connections', 'outlook')]",
+                "connectionName": "outlook",
+                "id": "[reference(concat('Microsoft.Web/connections/', 'outlook'), '2016-06-01').api.id]"
+              },
+              "servicetopic": {
+                "connectionId": "[resourceId('Microsoft.Web/connections', 'servicebus')]",
+                "connectionName": "servicebus",
+                "id": "[reference(concat('Microsoft.Web/connections/', 'servicebus'), '2016-06-01').api.id]"
+              },
+              "azuretable": {
+                "connectionId": "[resourceId('Microsoft.Web/connections', 'azuretable')]",
+                "connectionName": "azuretable",
+                "id": "[reference(concat('Microsoft.Web/connections/', 'azuretable'), '2016-06-01').api.id]"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2017-07-01",
+      "name": "[parameters('workflows_Employee_Create_App_name')]",
+      "location": "[parameters('resourcegroup_location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/connections', parameters('connections_servicebus_name'))]"
+      ],
+      "properties": {
+        "state": "Disabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "$connections": {
+              "defaultValue": {},
+              "type": "Object"
+            }
+          },
+          "triggers": {
+            "manual": {
+              "type": "Request",
+              "kind": "Http",
+              "inputs": {
+                "method": "POST",
+                "schema": {
+                  "properties": {
+                    "Admin": {
+                      "type": "boolean"
+                    },
+                    "EmailAdress": {
+                      "type": "string"
+                    },
+                    "Name": {
+                      "type": "string"
+                    },
+                    "PartitionKey": {
+                      "type": "string"
+                    },
+                    "RowKey": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "actions": {
+            "Response": {
+              "runAfter": {
+                "Send_message": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Response",
+              "kind": "Http",
+              "inputs": {
+                "body": "Your Request is being processed ",
+                "headers": {
+                  "Content-Type": "plain/text"
+                },
+                "statusCode": 200
+              }
+            },
+            "Response_3": {
+              "runAfter": {
+                "Send_message": [
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              },
+              "type": "Response",
+              "kind": "Http",
+              "inputs": {
+                "body": "Error: Could not find specified department",
+                "headers": {
+                  "content-type": "text/plain"
+                },
+                "statusCode": 404
+              }
+            },
+            "Send_message": {
+              "runAfter": {},
+              "type": "ApiConnection",
+              "inputs": {
+                "body": {
+                  "ContentData": "@{base64(triggerBody())}",
+                  "ContentType": "application/json",
+                  "Label": "create",
+                  "Properties": "@triggerBody()"
+                },
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['servicetopic']['connectionId']"
+                  }
+                },
+                "method": "post",
+                "path": "/@{encodeURIComponent(encodeURIComponent('employeeroutetopic'))}/messages",
+                "queries": {
+                  "systemProperties": "Run Details"
+                }
+              }
+            }
+          },
+          "outputs": {}
+        },
+        "parameters": {
+          "$connections": {
+            "value": {
+              "servicetopic": {
+                "connectionId": "[resourceId('Microsoft.Web/connections', 'servicebus')]",
+                "connectionName": "outlook",
+                "id": "[reference(concat('Microsoft.Web/connections/', 'servicebus'), '2016-06-01').api.id]"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2017-07-01",
+      "name": "[parameters('workflows_Employee_Delete_App_name')]",
+      "location": "[parameters('resourcegroup_location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/connections', parameters('connections_servicebus_name'))]"
+      ],
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "$connections": {
+              "defaultValue": {},
+              "type": "Object"
+            }
+          },
+          "triggers": {
+            "manual": {
+              "type": "Request",
+              "kind": "Http",
+              "inputs": {
+                "schema": {
+                  "properties": {
+                    "Admin": {
+                      "type": "boolean"
+                    },
+                    "EmailAdress": {
+                      "type": "string"
+                    },
+                    "Name": {
+                      "type": "string"
+                    },
+                    "PartitionKey": {
+                      "type": "string"
+                    },
+                    "RowKey": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "actions": {
+            "Response": {
+              "runAfter": {
+                "Send_message": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Response",
+              "kind": "Http",
+              "inputs": {
+                "body": "Your Request has been added to the queue",
+                "headers": {
+                  "content-type": "text/plain"
+                },
+                "statusCode": 200
+              }
+            },
+            "Response_2": {
+              "runAfter": {
+                "Send_message": [
+                  "Failed",
+                  "Skipped"
+                ]
+              },
+              "type": "Response",
+              "kind": "Http",
+              "inputs": {
+                "body": "Your requets has failed.",
+                "headers": {
+                  "content-type": "text/plain"
+                },
+                "statusCode": 400
+              }
+            },
+            "Send_message": {
+              "runAfter": {},
+              "type": "ApiConnection",
+              "inputs": {
+                "body": {
+                  "ContentData": "@{base64(triggerBody())}",
+                  "ContentType": "application/json",
+                  "Label": "delete",
+                  "Properties": "@triggerBody()"
+                },
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['servicetopic']['connectionId']"
+                  }
+                },
+                "method": "post",
+                "path": "/@{encodeURIComponent(encodeURIComponent('employeeroutetopic'))}/messages",
+                "queries": {
+                  "systemProperties": "Run Details"
+                }
+              }
+            }
+          },
+          "outputs": {}
+        },
+        "parameters": {
+          "$connections": {
+            "value": {
+              "servicetopic": {
+                "connectionId": "[resourceId('Microsoft.Web/connections', 'servicebus')]",
+                "connectionName": "outlook",
+                "id": "[reference(concat('Microsoft.Web/connections/', 'servicebus'), '2016-06-01').api.id]"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/AuthorizationRules",
+      "apiVersion": "2017-04-01",
+      "name": "[concat(parameters('namespaces_azemployeebusprod_name'), '/RootManageSharedAccessKey')]",
+      "location": "[parameters('resourcegroup_location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces', parameters('namespaces_azemployeebusprod_name'))]"
+      ],
+      "properties": {
+        "rights": [
+          "Listen",
+          "Manage",
+          "Send"
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics",
+      "apiVersion": "2017-04-01",
+      "name": "[concat(parameters('namespaces_azemployeebusprod_name'), '/employeeroutetopic')]",
+      "location": "[parameters('resourcegroup_location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces', parameters('namespaces_azemployeebusprod_name'))]"
+      ],
+      "properties": {
+        "defaultMessageTimeToLive": "P14D",
+        "maxSizeInMegabytes": 1024,
+        "requiresDuplicateDetection": false,
+        "duplicateDetectionHistoryTimeWindow": "PT10M",
+        "enableBatchedOperations": true,
+        "status": "Active",
+        "supportOrdering": false,
+        "autoDeleteOnIdle": "P10675199DT2H48M5.4775807S",
+        "enablePartitioning": true,
+        "enableExpress": false
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices",
+      "apiVersion": "2019-04-01",
+      "name": "[concat(parameters('storageAccounts_employeestorageunqprod_name'), '/default')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_employeestorageunqprod_name'))]"
+      ],
+      "properties": {
+        "cors": {
+          "corsRules": []
+        },
+        "deleteRetentionPolicy": {
+          "enabled": false
+        }
+      }
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics/subscriptions",
+      "apiVersion": "2017-04-01",
+      "name": "[concat(parameters('namespaces_azemployeebusprod_name'), '/employeeroutetopic/CreateSub')]",
+      "location": "[parameters('resourcegroup_location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces/topics', parameters('namespaces_azemployeebusprod_name'), 'employeeroutetopic')]",
+        "[resourceId('Microsoft.ServiceBus/namespaces', parameters('namespaces_azemployeebusprod_name'))]"
+      ],
+      "properties": {
+        "lockDuration": "PT5M",
+        "requiresSession": false,
+        "defaultMessageTimeToLive": "PT10M",
+        "deadLetteringOnMessageExpiration": true,
+        "deadLetteringOnFilterEvaluationExceptions": true,
+        "maxDeliveryCount": 20,
+        "status": "Active",
+        "enableBatchedOperations": false,
+        "autoDeleteOnIdle": "P1000D"
+      }
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics/subscriptions",
+      "apiVersion": "2017-04-01",
+      "name": "[concat(parameters('namespaces_azemployeebusprod_name'), '/employeeroutetopic/DeleteSub')]",
+      "location": "[parameters('resourcegroup_location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces/topics', parameters('namespaces_azemployeebusprod_name'), 'employeeroutetopic')]",
+        "[resourceId('Microsoft.ServiceBus/namespaces', parameters('namespaces_azemployeebusprod_name'))]"
+      ],
+      "properties": {
+        "lockDuration": "PT5M",
+        "requiresSession": false,
+        "defaultMessageTimeToLive": "PT10M",
+        "deadLetteringOnMessageExpiration": true,
+        "deadLetteringOnFilterEvaluationExceptions": true,
+        "maxDeliveryCount": 20,
+        "status": "Active",
+        "enableBatchedOperations": false,
+        "autoDeleteOnIdle": "P1000D"
+      }
+    },
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2017-07-01",
+      "name": "[parameters('workflows_Eployee_MailHandler_name')]",
+      "location": "[parameters('resourcegroup_location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/connections', parameters('connections_outlook_name'))]",
+        "[resourceId('Microsoft.Web/connections', parameters('connections_servicebus_name'))]",
+        "[resourceId('Microsoft.Web/connections', parameters('connections_azuretable_name'))]"
+      ],
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "$connections": {
+              "defaultValue": {},
+              "type": "Object"
+            }
+          },
+          "triggers": {
+            "When_a_message_is_received_in_a_topic_subscription_(peek-lock)": {
+              "recurrence": {
+                "frequency": "Day",
+                "interval": 3
+              },
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['servicetopic']['connectionId']"
+                  }
+                },
+                "method": "get",
+                "path": "/@{encodeURIComponent(encodeURIComponent('employeeroutetopic'))}/subscriptions/@{encodeURIComponent('DeleteSub')}/messages/head/peek",
+                "queries": {
+                  "sessionId": "None",
+                  "subscriptionType": "Main"
+                }
+              }
+            }
+          },
+          "actions": {
+            "Complete_the_message_in_a_topic_subscription_4": {
+              "runAfter": {
+                "Condition": [
+                  "Succeeded"
+                ]
+              },
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['servicetopic']['connectionId']"
+                  }
+                },
+                "method": "delete",
+                "path": "/@{encodeURIComponent(encodeURIComponent('employeeroutetopic'))}/subscriptions/@{encodeURIComponent('DeleteSub')}/messages/complete",
+                "queries": {
+                  "lockToken": "@triggerBody()?['LockToken']",
+                  "subscriptionType": "Main"
+                }
+              }
+            },
+            "Compose": {
+              "runAfter": {
+                "Parse_JSON": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Compose",
+              "inputs": "A request was sent to delete a employee\nName : @{body('Parse_JSON')?['Name']}\nId : @{body('Parse_JSON')?['RowKey']}\nDepartment : @{body('Parse_JSON')?['PartitionKey']}"
+            },
+            "Condition": {
+              "actions": {
+                "Condition_2": {
+                  "actions": {
+                    "Delete_Entity": {
+                      "runAfter": {},
+                      "type": "ApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connection": {
+                            "name": "@parameters('$connections')['azuretable']['connectionId']"
+                          }
+                        },
+                        "method": "delete",
+                        "path": "/Tables/@{encodeURIComponent('Employee')}/entities/etag(PartitionKey='@{encodeURIComponent(body('Parse_JSON')?['PartitionKey'])}',RowKey='@{encodeURIComponent(body('Parse_JSON')?['RowKey'])}')"
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Send_approval_email": [
+                      "Succeeded"
+                    ]
+                  },
+                  "expression": {
+                    "and": [
+                      {
+                        "equals": [
+                          "@body('Send_approval_email')?['SelectedOption']",
+                          "Approve"
+                        ]
+                      }
+                    ]
+                  },
+                  "type": "If"
+                },
+                "Send_approval_email": {
+                  "runAfter": {},
+                  "type": "ApiConnectionWebhook",
+                  "inputs": {
+                    "body": {
+                      "Message": {
+                        "Body": "@{outputs('Compose')}",
+                        "Importance": "Normal",
+                        "Options": "Approve, Reject",
+                        "Subject": "Approval Request",
+                        "To": "oskar.aronsson@learnet.se"
+                      },
+                      "NotificationUrl": "@{listCallbackUrl()}"
+                    },
+                    "host": {
+                      "connection": {
+                        "name": "@parameters('$connections')['outlook']['connectionId']"
+                      }
+                    },
+                    "path": "/approvalmail/$subscriptions"
+                  }
+                },
+                "Send_message_2": {
+                  "runAfter": {
+                    "Send_approval_email": [
+                      "TimedOut"
+                    ]
+                  },
+                  "type": "ApiConnection",
+                  "inputs": {
+                    "body": {
+                      "ContentData": "@{triggerBody()?['ContentData']}",
+                      "ContentType": "application/json",
+                      "Label": "Delete",
+                      "ScheduledEnqueueTimeUtc": "@{addHours(startOfDay(addDays(utcNow(),1)), 10)}"
+                    },
+                    "host": {
+                      "connection": {
+                        "name": "@parameters('$connections')['servicetopic']['connectionId']"
+                      }
+                    },
+                    "method": "post",
+                    "path": "/@{encodeURIComponent(encodeURIComponent('employeeroutetopic'))}/messages",
+                    "queries": {
+                      "systemProperties": "None"
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Compose": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              },
+              "else": {
+                "actions": {
+                  "Send_message": {
+                    "runAfter": {},
+                    "type": "ApiConnection",
+                    "inputs": {
+                      "body": {
+                        "ContentData": "@{triggerBody()?['ContentData']}",
+                        "ContentType": "application/json",
+                        "Label": "delete",
+                        "ScheduledEnqueueTimeUtc": "@{addHours(startOfDay(addDays(utcNow(),1)), 10)}"
+                      },
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['servicetopic']['connectionId']"
+                        }
+                      },
+                      "method": "post",
+                      "path": "/@{encodeURIComponent(encodeURIComponent('employeeroutetopic'))}/messages",
+                      "queries": {
+                        "systemProperties": "None"
+                      }
+                    }
+                  }
+                }
+              },
+              "expression": {
+                "and": [
+                  {
+                    "and": [
+                      {
+                        "greater": [
+                          "@ticks(addHours(utcNow(),2))",
+                          "@add(ticks(startOfDay(addHours(utcNow(), 2))),288000000000)"
+                        ]
+                      },
+                      {
+                        "less": [
+                          "@ticks(addHours(utcNow(),2))",
+                          "@add(ticks(startOfDay(addHours(utcNow(), 2))),648000000000)"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "type": "If"
+            },
+            "Parse_JSON": {
+              "runAfter": {},
+              "type": "ParseJson",
+              "inputs": {
+                "content": "@base64ToString(triggerBody()?['ContentData'])",
+                "schema": {
+                  "properties": {
+                    "Admin": {
+                      "type": "boolean"
+                    },
+                    "EmailAdress": {
+                      "type": "string"
+                    },
+                    "Name": {
+                      "type": "string"
+                    },
+                    "PartitionKey": {
+                      "type": "string"
+                    },
+                    "RowKey": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "outputs": {}
+        },
+        "parameters": {
+          "$connections": {
+            "value": {
+              "outlook": {
+                "connectionId": "[resourceId('Microsoft.Web/connections', 'outlook')]",
+                "connectionName": "outlook",
+                "id": "[reference(concat('Microsoft.Web/connections/', 'outlook'), '2016-06-01').api.id]"
+              },
+              "servicetopic": {
+                "connectionId": "[resourceId('Microsoft.Web/connections', 'servicebus')]",
+                "connectionName": "servicebus",
+                "id": "[reference(concat('Microsoft.Web/connections/', 'servicebus'), '2016-06-01').api.id]"
+              },
+              "azuretable": {
+                "connectionId": "[resourceId('Microsoft.Web/connections', 'azuretable')]",
+                "connectionName": "azuretable",
+                "id": "[reference(concat('Microsoft.Web/connections/', 'azuretable'), '2016-06-01').api.id]"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics/subscriptions/rules",
+      "apiVersion": "2017-04-01",
+      "name": "[concat(parameters('namespaces_azemployeebusprod_name'), '/employeeroutetopic/CreateSub/createfilter')]",
+      "location": "[parameters('resourcegroup_location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces/topics/subscriptions', parameters('namespaces_azemployeebusprod_name'), 'employeeroutetopic', 'CreateSub')]",
+        "[resourceId('Microsoft.ServiceBus/namespaces/topics', parameters('namespaces_azemployeebusprod_name'), 'employeeroutetopic')]",
+        "[resourceId('Microsoft.ServiceBus/namespaces', parameters('namespaces_azemployeebusprod_name'))]"
+      ],
+      "properties": {
+        "action": {},
+        "filterType": "CorrelationFilter",
+        "correlationFilter": {
+          "label": "create"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics/subscriptions/rules",
+      "apiVersion": "2017-04-01",
+      "name": "[concat(parameters('namespaces_azemployeebusprod_name'), '/employeeroutetopic/DeleteSub/deletefilter')]",
+      "location": "[parameters('resourcegroup_location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces/topics/subscriptions', parameters('namespaces_azemployeebusprod_name'), 'employeeroutetopic', 'DeleteSub')]",
+        "[resourceId('Microsoft.ServiceBus/namespaces/topics', parameters('namespaces_azemployeebusprod_name'), 'employeeroutetopic')]",
+        "[resourceId('Microsoft.ServiceBus/namespaces', parameters('namespaces_azemployeebusprod_name'))]"
+      ],
+      "properties": {
+        "action": {},
+        "filterType": "CorrelationFilter",
+        "correlationFilter": {
+          "label": "delete"
+        }
+      }
+    }
+  ]
+}

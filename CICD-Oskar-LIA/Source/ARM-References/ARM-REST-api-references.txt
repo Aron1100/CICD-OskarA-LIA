@@ -1,0 +1,8 @@
+armclient:
+Kan användas för att hämta resursinformation från befintliga resurser som inte finns tillgänglig i dokumentation.
+I detta fall använde jag armclient för att hämta parametrarna för en connection till ett table men
+armclient kan hämta parametrar till andra resurstyper. 
+
+github link: https://github.com/projectkudu/ARMClient
+
+

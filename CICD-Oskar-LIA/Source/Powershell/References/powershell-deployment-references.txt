@@ -1,0 +1,4 @@
+resourcegroup deployment via powershell
+https://docs.microsoft.com/en-gb/azure/azure-resource-manager/resource-group-template-deploy
+table deployment on storage
+https://docs.microsoft.com/en-us/azure/storage/tables/table-storage-how-to-use-powershell

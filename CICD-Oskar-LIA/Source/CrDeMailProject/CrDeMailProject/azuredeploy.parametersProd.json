@@ -1,0 +1,33 @@
+﻿{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "connections_outlook_name": {
+      "value": "outlook"
+    },
+    "connections_azuretable_name": {
+      "value": "azuretable"
+    },
+    "connections_servicebus_name": {
+      "value": "servicebus"
+    },
+    "workflows_Employee_Create_App_name": {
+      "value": "CreateRequestHandler"
+    },
+    "workflows_Employee_Delete_App_name": {
+      "value": "DeleteRequestHandler"
+    },
+    "workflows_Eployee_MailHandler_name": {
+      "value": "DeleteMailApp"
+    },
+    "namespaces_azemployeebusprod_name": {
+      "value": "empmailsbprod"
+    },
+    "storageAccounts_employeestorageunqprod_name": {
+      "value": "empsaprod3231"
+    },
+    "workflows_AdminValidator_name": {
+      "value": "AdminValidationApp"
+    }
+  }
+}

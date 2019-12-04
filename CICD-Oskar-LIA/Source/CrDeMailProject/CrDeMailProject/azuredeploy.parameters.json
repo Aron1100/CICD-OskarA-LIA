@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "connections_outlook_name": {
+      "value": "outlook"
+    },
+    "connections_azuretable_name": {
+      "value": "azuretable"
+    },
+    "connections_servicebus_name": {
+      "value": "servicebus"
+    },
+    "workflows_Employee_Create_App_name": {
+      "value": "LogicAppCreate"
+    },
+    "workflows_Employee_Delete_App_name": {
+      "value": "LogicAppDelete"
+    },
+    "workflows_Eployee_MailHandler_name": {
+      "value": "LogicAppMailHandler"
+    },
+    "namespaces_azemployeebusprod_name": {
+      "value": "unqservcsbuspro"
+    },
+    "storageAccounts_employeestorageunqprod_name": {
+      "value": "unqstrogeacpro"
+    },
+    "workflows_AdminValidator_name": {
+      "value": "AdminValidatorApp"
+    }
+  }
+}

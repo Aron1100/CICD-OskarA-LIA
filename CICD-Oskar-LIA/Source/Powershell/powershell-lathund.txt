@@ -1,0 +1,16 @@
+Här är ett exempel script på en deployment via powershell, det är inte meningen att funka för vem som helst eftersom:
+Scriptet är hårdcodat till en specifik subscription och resursgrupp på mitt azure account, en parameter behövs här för deployment
+till andra accounts och resource groups. template paths är inte routade correkt.
+
+Vad händer i scriptet?
+Ange namn till resurser, hårdcodade av mig utifrån parameterfilen
+Specifierar en template och parameter som skall deployas.
+Hämtar referenceid från deployad storage resurs
+Navigerar till storage resurcens context och via resurces lägger till ett table.
+Man kan inte deploya tables via arm templates, men via powershell.
+Liknande fall gäller andra azure resurser och vilka specifikationer som är tillgängliga för vilka resurser
+Behöver undersökas. Detta kan variera från projekt till projekt, vilket lägger stor variation på azure workload deployment.
+Till sist ska vi validera oath connections: där har jag inkluderas scipts ett exempel och github 
+
+Github logic-app-oath-validtion link: https://github.com/logicappsio/LogicAppConnectionAuth
+
